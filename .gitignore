@@ -19,14 +19,20 @@ backend/.env
 backend/.env.*
 !backend/.env.example
 backend/storage/logs/*.log
-backend/storage/framework/cache/data/
-backend/storage/framework/sessions/
-backend/storage/framework/views/
+!backend/storage/logs/.gitkeep
+backend/storage/framework/cache/data/*
+!backend/storage/framework/cache/data/.gitkeep
+backend/storage/framework/sessions/*
+!backend/storage/framework/sessions/.gitkeep
+backend/storage/framework/views/*
+!backend/storage/framework/views/.gitkeep
 backend/bootstrap/cache/*.php
 backend/public/hot
 backend/public/storage
 backend/.phpunit.cache/
 backend/phpunit.xml
+# Loose migration files at backend root (moved to database/migrations/)
+backend/2026_01_01_*.php
 
 # ============================================================
 # Vue / Vite frontend
