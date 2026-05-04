@@ -17,7 +17,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://backend:80',
+        target: 'http://127.0.0.1:8000', // 👈 Laravel artisan serve
         changeOrigin: true,
       },
     },
