@@ -5,12 +5,12 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost/api/v1',
+  baseURL: import.meta.env.VITE_API_URL,
   headers: {
     'Content-Type': 'application/json',
-    'Accept':       'application/json',
+    'Accept': 'application/json',
   },
-  withCredentials: true,  // Required for Sanctum cookie auth
+  withCredentials: true,
 })
 
 // Attach Bearer token on every request
