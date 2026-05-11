@@ -9,20 +9,22 @@ return new class extends Migration
     public function up(): void
     {
         // ── Cooperative profile (single-row config) ──────────
-        Schema::create('coop_profile', function (Blueprint $table) {
-            $table->id();
-            $table->string('name', 200);
-            $table->string('cda_reg_no', 50)->nullable();
-            $table->text('address')->nullable();
-            $table->string('contact', 30)->nullable();
-            $table->string('email', 150)->nullable();
-            $table->string('website', 150)->nullable();
-            $table->string('hr_signatory', 150)->nullable();
-            $table->string('coop_signatory', 150)->nullable();
-            $table->string('logo_url', 255)->nullable();
-            $table->string('fiscal_year_start', 20)->default('January');
-            $table->timestamps();
-        });
+        if (!Schema::hasTable('coop_profile')) {
+            Schema::create('coop_profile', function (Blueprint $table) {
+                $table->id();
+                $table->string('name', 200);
+                $table->string('cda_reg_no', 50)->nullable();
+                $table->text('address')->nullable();
+                $table->string('contact', 30)->nullable();
+                $table->string('email', 150)->nullable();
+                $table->string('website', 150)->nullable();
+                $table->string('hr_signatory', 150)->nullable();
+                $table->string('coop_signatory', 150)->nullable();
+                $table->string('logo_url', 255)->nullable();
+                $table->string('fiscal_year_start', 20)->default('January');
+                $table->timestamps();
+            });
+        }
 
         // ── Companies ────────────────────────────────────────
         Schema::create('companies', function (Blueprint $table) {
@@ -68,15 +70,17 @@ return new class extends Migration
         });
 
         // ── System preferences (key-value store) ─────────────
-        Schema::create('system_preferences', function (Blueprint $table) {
-            $table->id();
-            $table->string('key', 100)->unique();
-            $table->text('value')->nullable();
-            $table->string('group', 50)->default('general');
-            $table->string('description', 255)->nullable();
-            $table->timestamps();
-            $table->index('group');
-        });
+        if (!Schema::hasTable('system_preferences')) {
+            Schema::create('system_preferences', function (Blueprint $table) {
+                $table->id();
+                $table->string('key', 100)->unique();
+                $table->text('value')->nullable();
+                $table->string('group', 50)->default('general');
+                $table->string('description', 255)->nullable();
+                $table->timestamps();
+                $table->index('group');
+            });
+        }
 
         // ── Payments (amortization period payments) ───────────
         Schema::create('payments', function (Blueprint $table) {
@@ -101,10 +105,12 @@ return new class extends Migration
         });
 
         // ── Add penalty columns to amortization_schedules ─────
-        Schema::table('amortization_schedules', function (Blueprint $table) {
-            $table->decimal('penalty_amount', 12, 2)->default(0)->after('paid_amount');
-            $table->integer('days_overdue')->default(0)->after('penalty_amount');
-        });
+        if (!Schema::hasColumn('amortization_schedules', 'penalty_amount')) {
+            Schema::table('amortization_schedules', function (Blueprint $table) {
+                $table->decimal('penalty_amount', 12, 2)->default(0)->after('paid_amount');
+                $table->integer('days_overdue')->default(0)->after('penalty_amount');
+            });
+        }
     }
 
     public function down(): void

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Loan extends Model
 {
@@ -83,6 +84,43 @@ class Loan extends Model
     public function amortizationSchedules(): HasMany
     {
         return $this->hasMany(AmortizationSchedule::class, 'loan_id')->orderBy('period_no');
+    }
+
+    public function restructurings(): HasMany
+    {
+        return $this->hasMany(LoanRestructuring::class)->orderByDesc('created_at');
+    }
+
+    public function latestRestructuring(): HasOne
+    {
+        return $this->hasOne(LoanRestructuring::class)->latestOfMany('created_at');
+    }
+
+    // ── Accessors ─────────────────────────────────────────────
+
+    public function getIsRestructuredAttribute(): bool
+    {
+        return $this->restructurings()->exists();
+    }
+
+    public function getRestructuringCountAttribute(): int
+    {
+        return $this->restructurings()->count();
+    }
+
+    public function getRemainingBalanceAttribute(): float
+    {
+        return (float) $this->amortizationSchedules()
+            ->whereIn('status', ['PENDING', 'PARTIAL', 'OVERDUE'])
+            ->selectRaw('SUM(amount_due - paid_amount) as remaining')
+            ->value('remaining') ?? 0.0;
+    }
+
+    public function getTotalPenaltyOutstandingAttribute(): float
+    {
+        return (float) $this->amortizationSchedules()
+            ->where('status', 'OVERDUE')
+            ->sum('penalty_amount');
     }
 
     // ── Scopes ────────────────────────────────────────────────

@@ -8,6 +8,15 @@ use App\Http\Controllers\Api\LoanTypeSettingController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\EligibilityController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\AuditLogController;
+use App\Http\Controllers\Api\BeneficiaryController;
+use App\Http\Controllers\Api\ShareCapitalController;
+use App\Http\Controllers\Api\RestructuringController;
+use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\LoanPacketController;
+use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\UserManagementController;
+use App\Http\Controllers\Api\BillController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -49,5 +58,79 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::get('aging',       [ReportController::class, 'aging']);
         Route::get('outstanding', [ReportController::class, 'outstanding']);
     });
+
+    // ── Audit Logs ───────────────────────────────────────────
+    Route::prefix('audit-logs')->group(function () {
+        Route::get('/',                [AuditLogController::class, 'index']);
+        Route::get('/{auditLog}',      [AuditLogController::class, 'show']);
+        Route::get('/for/{type}/{id}', [AuditLogController::class, 'forRecord']);
+    });
+
+    // ── Beneficiaries ────────────────────────────────────────
+    Route::prefix('members/{member}/beneficiaries')->group(function () {
+        Route::get('/',                [BeneficiaryController::class, 'index']);
+        Route::post('/',               [BeneficiaryController::class, 'store']);
+        Route::post('/reorder',        [BeneficiaryController::class, 'reorder']);
+        Route::get('/status',          [BeneficiaryController::class, 'status']);
+        Route::get('/declaration.pdf', [BeneficiaryController::class, 'declaration']);
+    });
+    Route::apiResource('beneficiaries', BeneficiaryController::class)
+        ->only(['show', 'update', 'destroy']);
+
+    // ── Share Capital ─────────────────────────────────────────
+    Route::get('share-capital/report', [ShareCapitalController::class, 'report']);
+    Route::prefix('members/{member}/share-capital')->group(function () {
+        Route::get('/',           [ShareCapitalController::class, 'index']);
+        Route::post('/',          [ShareCapitalController::class, 'store']);
+        Route::get('/summary',    [ShareCapitalController::class, 'summary']);
+        Route::get('/ledger.pdf', [ShareCapitalController::class, 'pdf']);
+    });
+    Route::delete('share-capital/{shareCapital}', [ShareCapitalController::class, 'destroy']);
+
+    // ── Loan Restructuring ────────────────────────────────────
+    Route::prefix('loans/{loan}/restructurings')->group(function () {
+        Route::get('/',               [RestructuringController::class, 'index']);
+        Route::post('/',              [RestructuringController::class, 'store']);
+        Route::post('/preview',       [RestructuringController::class, 'preview']);
+        Route::get('/{restructuring}',[RestructuringController::class, 'show']);
+    });
+
+    // ── Notifications ─────────────────────────────────────────
+    Route::prefix('notification-logs')->group(function () {
+        Route::get('/',          [NotificationController::class, 'index']);
+        Route::get('/settings',  [NotificationController::class, 'settings']);
+        Route::put('/settings',  [NotificationController::class, 'updateSettings']);
+        Route::post('/test-sms', [NotificationController::class, 'testSms']);
+    });
+
+    // ── PDF Loan Packet ───────────────────────────────────────
+    Route::get('loans/{loan}/packet.pdf', [LoanPacketController::class, 'download']);
+
+    // ── Dashboard analytics ───────────────────────────────────
+    Route::get('dashboard', [DashboardController::class, 'index']);
+
+    // ── User Management (super-admin only) ────────────────────
+    Route::prefix('users')->group(function () {
+        Route::get('/',                              [UserManagementController::class, 'index']);
+        Route::post('/',                             [UserManagementController::class, 'store']);
+        Route::get('/{userAccount}',                 [UserManagementController::class, 'show']);
+        Route::put('/{userAccount}',                 [UserManagementController::class, 'update']);
+        Route::post('/{userAccount}/toggle-active',  [UserManagementController::class, 'toggleActive']);
+        Route::post('/{userAccount}/reset-password', [UserManagementController::class, 'resetPassword']);
+    });
+
+    // ── Billing ───────────────────────────────────────────────
+    Route::prefix('bills')->group(function () {
+        Route::get('/',                              [BillController::class, 'index']);
+        Route::post('/',                             [BillController::class, 'store']);
+        Route::get('/{bill}',                        [BillController::class, 'show']);
+        Route::post('/{bill}/issue',                 [BillController::class, 'issue']);
+        Route::post('/{bill}/remittance',            [BillController::class, 'uploadRemittance']);
+        Route::post('/{bill}/settle',                [BillController::class, 'settle']);
+        Route::post('/{bill}/cancel',                [BillController::class, 'cancel']);
+        Route::get('/{bill}/pdf',                    [BillController::class, 'pdf'])->name('api.bills.pdf');
+    });
+    Route::get('bills/remittance/{remittance}/file', [BillController::class, 'remittanceFile'])
+        ->name('api.bills.remittance.file');
 
 });

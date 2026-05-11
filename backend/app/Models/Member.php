@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Member extends Model
 {
@@ -47,6 +48,56 @@ class Member extends Model
         return $this->hasMany(Loan::class, 'member_id');
     }
 
+    public function beneficiaries(): HasMany
+    {
+        return $this->hasMany(Beneficiary::class)->orderBy('type')->orderBy('sort_order');
+    }
+
+    public function primaryBeneficiaries(): HasMany
+    {
+        return $this->hasMany(Beneficiary::class)
+            ->where('type', 'primary')
+            ->orderBy('sort_order');
+    }
+
+    public function secondaryBeneficiaries(): HasMany
+    {
+        return $this->hasMany(Beneficiary::class)
+            ->where('type', 'secondary')
+            ->orderBy('sort_order');
+    }
+
+    public function shareCapitalTransactions(): HasMany
+    {
+        return $this->hasMany(ShareCapitalTransaction::class)
+            ->orderByDesc('transaction_date')
+            ->orderByDesc('id');
+    }
+
+    public function latestShareCapitalTransaction(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ShareCapitalTransaction::class)
+            ->ofMany([
+                'transaction_date' => 'max',
+                'id'               => 'max',
+            ]);
+    }
+
+    public function syncShareCapitalBalance(): void
+    {
+        $credits = $this->shareCapitalTransactions()
+            ->withoutTrashed()
+            ->where('direction', 'credit')
+            ->sum('amount');
+
+        $debits = $this->shareCapitalTransactions()
+            ->withoutTrashed()
+            ->where('direction', 'debit')
+            ->sum('amount');
+
+        $this->update(['share_capital' => max(0, round((float)$credits - (float)$debits, 2))]);
+    }
+
     public function activeLoans(): HasMany
     {
         return $this->hasMany(Loan::class, 'member_id')->where('status', 'ACTIVE');
@@ -79,5 +130,20 @@ class Member extends Model
     public function getFullNameAttribute(): string
     {
         return trim("{$this->first_name} {$this->middle_name} {$this->last_name}");
+    }
+
+    public function getBeneficiaryCompleteAttribute(): bool
+    {
+        $primary = $this->primaryBeneficiaries()->withoutTrashed()->get();
+        if ($primary->isEmpty()) return false;
+
+        $totalShare = $primary->sum('share_percentage');
+        if (round($totalShare, 2) !== 100.00) return false;
+
+        foreach ($primary as $b) {
+            if ($b->is_minor && empty($b->guardian_name)) return false;
+        }
+
+        return true;
     }
 }
