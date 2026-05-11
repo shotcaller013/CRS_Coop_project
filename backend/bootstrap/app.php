@@ -12,7 +12,15 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'check.active'      => \App\Http\Middleware\CheckUserActive::class,
+            'update.last.login' => \App\Http\Middleware\UpdateLastLogin::class,
+        ]);
+
+        $middleware->appendToGroup('api', [
+            \App\Http\Middleware\CheckUserActive::class,
+            \App\Http\Middleware\UpdateLastLogin::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
