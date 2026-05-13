@@ -2,7 +2,22 @@
   <router-view v-if="route.meta.public" />
 
   <div v-else class="app-shell">
-    <aside class="sidebar">
+    <!-- Mobile top bar -->
+    <div class="mobile-topbar">
+      <button class="hamburger" @click="sidebarOpen = !sidebarOpen" aria-label="Toggle menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="3" y1="6"  x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <span class="mobile-brand-name">CRS Credit Coop</span>
+    </div>
+
+    <!-- Sidebar overlay (mobile) -->
+    <div v-if="sidebarOpen" class="sidebar-overlay" @click="sidebarOpen = false"></div>
+
+    <aside class="sidebar" :class="{ 'mobile-open': sidebarOpen }">
       <div class="sidebar-brand">
         <div class="brand-logo">CRS</div>
         <div>
@@ -47,6 +62,12 @@
           Payments
         </router-link>
 
+        <div class="nav-section">Finance</div>
+        <router-link to="/billing" class="nav-item" active-class="nav-active">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+          Billing
+        </router-link>
+
         <div class="nav-section">Reports</div>
         <router-link to="/reports" class="nav-item" active-class="nav-active">
           <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>
@@ -54,6 +75,10 @@
         </router-link>
 
         <div class="nav-section">System</div>
+        <router-link to="/users" class="nav-item" active-class="nav-active">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Users
+        </router-link>
         <router-link to="/settings" class="nav-item" active-class="nav-active">
           <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Settings
@@ -87,7 +112,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useToast } from './composables/useToast'
 import { useAuth } from './composables/useAuth'
@@ -99,6 +124,9 @@ const { user, clearSession } = useAuth()
 const route  = useRoute()
 const router = useRouter()
 const { pendingCount } = useMembersStats()
+
+const sidebarOpen = ref(false)
+watch(route, () => { sidebarOpen.value = false })
 
 const initials = computed(() => {
   const name = user.value?.name ?? ''
@@ -252,5 +280,53 @@ async function handleLogout() {
   display: flex;
   flex-direction: column;
   background: var(--surface);
+}
+
+/* ── Mobile topbar (hidden on desktop) ─────────────────── */
+.mobile-topbar { display: none; }
+.sidebar-overlay { display: none; }
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-shell { flex-direction: column; }
+
+  /* Mobile topbar */
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 16px; height: 52px;
+    background: var(--crs-red); color: white;
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 300; flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  .hamburger {
+    background: none; border: none; cursor: pointer;
+    color: white; display: flex; align-items: center; padding: 4px;
+  }
+  .hamburger svg { width: 22px; height: 22px; }
+  .mobile-brand-name {
+    font-size: 14px; font-weight: 700; color: white;
+    letter-spacing: 0.02em;
+  }
+
+  /* Sidebar slides in/out */
+  .sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    z-index: 301;
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+
+  /* Overlay behind sidebar */
+  .sidebar-overlay {
+    display: block; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.5); z-index: 300;
+  }
+
+  /* Main area fills full width, offset by topbar height */
+  .main-area {
+    margin-left: 0;
+    padding-top: 52px;
+  }
 }
 </style>
