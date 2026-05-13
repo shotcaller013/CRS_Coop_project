@@ -19,11 +19,11 @@ class CoopSeeder extends Seeder
     {
         // ── Loan Types ────────────────────────────────────────────
         $loanTypes = [
-            ['code' => 'commodity', 'label' => 'Commodity Loan',    'min_amount' => 10000, 'max_amount' => 100000, 'min_term' => 6,  'max_term' => 36, 'annual_rate' => 0.12, 'is_active' => true],
-            ['code' => 'salary',    'label' => 'Salary / Cash Loan', 'min_amount' => 5000,  'max_amount' => 50000,  'min_term' => 3,  'max_term' => 24, 'annual_rate' => 0.12, 'is_active' => true],
-            ['code' => 'emergency', 'label' => 'Emergency Loan',     'min_amount' => 3000,  'max_amount' => 30000,  'min_term' => 3,  'max_term' => 12, 'annual_rate' => 0.12, 'is_active' => true],
-            ['code' => 'educ',      'label' => 'Educational Loan',   'min_amount' => 5000,  'max_amount' => 80000,  'min_term' => 6,  'max_term' => 24, 'annual_rate' => 0.10, 'is_active' => true],
-            ['code' => 'multi',     'label' => 'Multi-purpose Loan', 'min_amount' => 10000, 'max_amount' => 150000, 'min_term' => 6,  'max_term' => 48, 'annual_rate' => 0.12, 'is_active' => true],
+            ['code' => 'commodity', 'label' => 'Commodity Loan',    'min_amount' => 10000, 'max_amount' => 100000, 'min_term' => 6,  'max_term' => 36, 'annual_rate_default' => 0.12, 'is_active' => true],
+            ['code' => 'salary',    'label' => 'Salary / Cash Loan', 'min_amount' => 5000,  'max_amount' => 50000,  'min_term' => 3,  'max_term' => 24, 'annual_rate_default' => 0.12, 'is_active' => true],
+            ['code' => 'emergency', 'label' => 'Emergency Loan',     'min_amount' => 3000,  'max_amount' => 30000,  'min_term' => 3,  'max_term' => 12, 'annual_rate_default' => 0.12, 'is_active' => true],
+            ['code' => 'educ',      'label' => 'Educational Loan',   'min_amount' => 5000,  'max_amount' => 80000,  'min_term' => 6,  'max_term' => 24, 'annual_rate_default' => 0.10, 'is_active' => true],
+            ['code' => 'multi',     'label' => 'Multi-purpose Loan', 'min_amount' => 10000, 'max_amount' => 150000, 'min_term' => 6,  'max_term' => 48, 'annual_rate_default' => 0.12, 'is_active' => true],
         ];
 
         foreach ($loanTypes as $lt) {
@@ -254,7 +254,7 @@ class CoopSeeder extends Seeder
                 $ld['amount'],
                 $ld['term_months'],
                 $ld['frequency'],
-                (float) $ld['loan_type']->annual_rate
+                (float) $ld['loan_type']->annual_rate_default
             );
 
             $dueDates = !empty($ld['first_due_date'])
@@ -270,7 +270,7 @@ class CoopSeeder extends Seeder
                 'amount'            => $ld['amount'],
                 'term_months'       => $ld['term_months'],
                 'frequency'         => $ld['frequency'],
-                'annual_rate'       => $ld['loan_type']->annual_rate,
+                'annual_rate'       => $ld['loan_type']->annual_rate_default,
                 'purpose'           => $ld['purpose'],
                 'co_maker_1_id'     => $coMaker1,
                 'co_maker_2_id'     => $coMaker2,
