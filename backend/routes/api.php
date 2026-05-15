@@ -17,10 +17,17 @@ use App\Http\Controllers\Api\LoanPacketController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\UserManagementController;
 use App\Http\Controllers\Api\BillController;
+use App\Http\Controllers\Api\MemberPortalAccountController;
+use App\Http\Controllers\Api\MemberPortalAuthController;
+use App\Http\Controllers\Api\MemberPortalController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::post('login',  [AuthController::class, 'login']);
+
+    // ── Member Portal (token-based, no Sanctum) ───────────────────
+    Route::post('member-portal/auth/login', [MemberPortalAuthController::class, 'login']);
+    Route::get('member-portal/dashboard',   [MemberPortalController::class, 'dashboard']);
 });
 
 Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
@@ -117,6 +124,16 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
         Route::put('/{userAccount}',                 [UserManagementController::class, 'update']);
         Route::post('/{userAccount}/toggle-active',  [UserManagementController::class, 'toggleActive']);
         Route::post('/{userAccount}/reset-password', [UserManagementController::class, 'resetPassword']);
+    });
+
+    // ── Member Portal Accounts (admin management) ─────────────────
+    Route::prefix('member-portal-accounts')->group(function () {
+        Route::get('/',                              [MemberPortalAccountController::class, 'index']);
+        Route::post('/',                             [MemberPortalAccountController::class, 'store']);
+        Route::get('/{memberPortalAccount}',         [MemberPortalAccountController::class, 'show']);
+        Route::put('/{memberPortalAccount}',         [MemberPortalAccountController::class, 'update']);
+        Route::post('/{memberPortalAccount}/toggle-active',  [MemberPortalAccountController::class, 'toggleActive']);
+        Route::post('/{memberPortalAccount}/reset-password', [MemberPortalAccountController::class, 'resetPassword']);
     });
 
     // ── Billing ───────────────────────────────────────────────

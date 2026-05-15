@@ -6,11 +6,14 @@ import { reportRoutes }    from './routes/report.routes'
 import { dashboardRoutes } from './routes/dashboard.routes'
 import { billingRoutes }   from './routes/billing.routes'
 import { userRoutes }      from './routes/user.routes'
+import { portalRoutes }    from './routes/portal.routes'
+import { toolsRoutes }     from './routes/tools.routes'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue'), meta: { public: true } },
+    ...portalRoutes,
 
     { path: '/members',   name: 'members',   component: () => import('@/views/MembersView.vue') },
     { path: '/loans',     name: 'loans',     component: () => import('@/views/LoanOfficerView.vue') },
@@ -25,6 +28,7 @@ const router = createRouter({
     ...reportRoutes,
     ...billingRoutes,
     ...userRoutes,
+    ...toolsRoutes,
   ],
 })
 
