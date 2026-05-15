@@ -12,4 +12,14 @@ export const settingService = {
   getPreferences:    ()        => request('/settings/preferences'),
   updatePreferences: (data)    => request('/settings/preferences', { method: 'PUT', body: data }),
   checkEligibility:  (data)    => request('/loans/eligibility-check', { method: 'POST', body: data }),
+
+  // Member Portal Account management (admin)
+  getMemberPortalAccounts:      (params = {}) => {
+    const q = new URLSearchParams(params).toString()
+    return request(`/member-portal-accounts${q ? '?' + q : ''}`)
+  },
+  createMemberPortalAccount:    (data)        => request('/member-portal-accounts', { method: 'POST', body: data }),
+  updateMemberPortalAccount:    (id, data)    => request(`/member-portal-accounts/${id}`, { method: 'PUT', body: data }),
+  toggleMemberPortalAccount:    (id)          => request(`/member-portal-accounts/${id}/toggle-active`, { method: 'POST', body: {} }),
+  resetMemberPortalPassword:    (id)          => request(`/member-portal-accounts/${id}/reset-password`, { method: 'POST', body: {} }),
 }

@@ -2,10 +2,14 @@
 
 namespace Database\Seeders;
 
+use App\Models\Beneficiary;
 use App\Models\LoanType;
 use App\Models\Member;
+use App\Models\MemberPortalAccount;
 use App\Models\Loan;
 use App\Models\AmortizationSchedule;
+use App\Models\Payment;
+use App\Models\ShareCapitalTransaction;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -167,6 +171,26 @@ class CoopSeeder extends Seeder
         }
         $this->command->info('✓ Members seeded: ' . count($members));
 
+        // ── Member Portal Accounts ────────────────────────────────
+        $portalPassword  = 'Demo@1234';
+        $defaultModules  = ['dashboard', 'loans', 'payments', 'shareCapital', 'beneficiaries', 'profile'];
+
+        foreach ($members as $member) {
+            $username = strstr($member->email, '@', true); // e.g. msantos
+            MemberPortalAccount::updateOrCreate(
+                ['member_id' => $member->id],
+                [
+                    'username'              => $username,
+                    'email'                 => $member->email,
+                    'password_hash'         => Hash::make($portalPassword),
+                    'force_password_change' => false,
+                    'modules_json'          => $defaultModules,
+                    'is_active'             => true,
+                ]
+            );
+        }
+        $this->command->info('✓ Member portal accounts seeded (password: ' . $portalPassword . ')');
+
         // ── Loans + Amortization Schedules ────────────────────────
         $commodity = LoanType::where('code', 'commodity')->first();
         $salary    = LoanType::where('code', 'salary')->first();
@@ -249,6 +273,22 @@ class CoopSeeder extends Seeder
             ],
         ];
 
+        // Remove any stale loans for demo members that are NOT in the seeded set
+        // (prevents leftover loan numbers from previous seeder runs polluting the portal)
+        $demoMemberIds  = array_map(fn($m) => $m->id, $members);
+        $seededLoanNos  = array_column($loansData, 'loan_no');
+        $staleLoans = Loan::whereIn('member_id', $demoMemberIds)
+            ->whereNotIn('loan_no', $seededLoanNos)
+            ->get();
+        foreach ($staleLoans as $stale) {
+            Payment::where('loan_id', $stale->id)->delete();           // payments first (FK to schedules)
+            AmortizationSchedule::where('loan_id', $stale->id)->forceDelete();
+            try { $stale->forceDelete(); } catch (\Throwable) { $stale->delete(); }
+        }
+        if ($staleLoans->count()) {
+            $this->command->warn("  Removed {$staleLoans->count()} stale loan(s) from previous seeder runs");
+        }
+
         foreach ($loansData as $ld) {
             $calc = $this->computeSchedule(
                 $ld['amount'],
@@ -288,7 +328,8 @@ class CoopSeeder extends Seeder
                 'approved_by_coop'  => $ld['approved_by_coop'] ?? null,
             ]);
 
-            // Rebuild amortization schedules
+            // Rebuild amortization schedules (delete payments first due to FK constraint)
+            Payment::where('loan_id', $loan->id)->delete();
             AmortizationSchedule::where('loan_id', $loan->id)->delete();
 
             $schedules = [];
@@ -314,13 +355,196 @@ class CoopSeeder extends Seeder
 
         $this->command->info('✓ Loans seeded: ' . count($loansData));
         $this->command->info('✓ Amortization schedules seeded');
+
+        // ── Payments ──────────────────────────────────────────────
+        // Maria Santos – LN-2026-00001 (5 of 48 bimonthly periods paid)
+        $mariaLoan = Loan::where('loan_no', 'LN-2026-00001')->first();
+        if ($mariaLoan) {
+            Payment::where('loan_id', $mariaLoan->id)->delete();
+            $mariaSchedules = AmortizationSchedule::where('loan_id', $mariaLoan->id)
+                ->orderBy('period_no')->take(5)->get();
+            foreach ($mariaSchedules as $idx => $sched) {
+                Payment::create([
+                    'loan_id'      => $mariaLoan->id,
+                    'schedule_id'  => $sched->id,
+                    'amount_paid'  => $sched->amount_due,
+                    'payment_type' => 'full',
+                    'or_number'    => sprintf('OR-2026-%05d', 101 + $idx),
+                    'payment_date' => $sched->due_date,
+                    'penalty_paid' => 0,
+                    'balance_after'=> $sched->balance,
+                    'received_by'  => $officer->id,
+                ]);
+                $sched->update(['status' => 'PAID', 'paid_amount' => $sched->amount_due, 'paid_date' => $sched->due_date]);
+            }
+            // Mark remaining past-due schedules as OVERDUE
+            AmortizationSchedule::where('loan_id', $mariaLoan->id)
+                ->where('period_no', '>', 5)
+                ->whereNotNull('due_date')
+                ->where('due_date', '<', now()->toDateString())
+                ->where('status', 'PENDING')
+                ->update(['status' => 'OVERDUE']);
+        }
+
+        // Carla Mendoza – LN-2026-00005 (CLOSED, all 12 monthly periods)
+        $carlaLoan = Loan::where('loan_no', 'LN-2026-00005')->first();
+        if ($carlaLoan) {
+            Payment::where('loan_id', $carlaLoan->id)->delete();
+            $carlaSchedules = AmortizationSchedule::where('loan_id', $carlaLoan->id)
+                ->orderBy('period_no')->get();
+            foreach ($carlaSchedules as $idx => $sched) {
+                Payment::create([
+                    'loan_id'      => $carlaLoan->id,
+                    'schedule_id'  => $sched->id,
+                    'amount_paid'  => $sched->amount_due,
+                    'payment_type' => 'full',
+                    'or_number'    => sprintf('OR-2025-%05d', 201 + $idx),
+                    'payment_date' => $sched->due_date,
+                    'penalty_paid' => 0,
+                    'balance_after'=> $sched->balance,
+                    'received_by'  => $officer->id,
+                ]);
+            }
+        }
+        $this->command->info('✓ Payments seeded');
+
+        // ── Share Capital Transactions ────────────────────────────
+        ShareCapitalTransaction::whereIn('member_id', array_map(fn($m) => $m->id, $members))->forceDelete();
+
+        $scData = [
+            // Maria Santos – target ₱15,000
+            ['member' => $members[0], 'rows' => [
+                ['type' => 'opening', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 5000.00,  'date' => '2018-04-01', 'or' => 'SC-OR-18001', 'remarks' => 'Opening balance upon membership'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 3000.00, 'balance_after' => 8000.00,  'date' => '2020-01-10', 'or' => 'SC-OR-20001', 'remarks' => 'Annual share capital deposit'],
+                ['type' => 'dividend','direction' => 'credit', 'amount' => 2000.00, 'balance_after' => 10000.00, 'date' => '2022-01-15', 'or' => 'SC-OR-22001', 'remarks' => 'Annual dividend 2021'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 3000.00, 'balance_after' => 13000.00, 'date' => '2024-01-10', 'or' => 'SC-OR-24001', 'remarks' => 'Annual share capital deposit'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 2000.00, 'balance_after' => 15000.00, 'date' => '2025-07-01', 'or' => 'SC-OR-25001', 'remarks' => 'Mid-year deposit'],
+            ]],
+            // Juan dela Cruz – target ₱10,000
+            ['member' => $members[1], 'rows' => [
+                ['type' => 'opening', 'direction' => 'credit', 'amount' => 3000.00, 'balance_after' => 3000.00,  'date' => '2020-07-01', 'or' => 'SC-OR-20002', 'remarks' => 'Opening balance upon membership'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 2000.00, 'balance_after' => 5000.00,  'date' => '2021-07-10', 'or' => 'SC-OR-21002', 'remarks' => 'Annual deposit'],
+                ['type' => 'dividend','direction' => 'credit', 'amount' => 1000.00, 'balance_after' => 6000.00,  'date' => '2023-01-10', 'or' => 'SC-OR-23002', 'remarks' => 'Annual dividend 2022'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 2500.00, 'balance_after' => 8500.00,  'date' => '2024-07-05', 'or' => 'SC-OR-24002', 'remarks' => 'Annual deposit'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 1500.00, 'balance_after' => 10000.00, 'date' => '2025-07-01', 'or' => 'SC-OR-25002', 'remarks' => 'Mid-year deposit'],
+            ]],
+            // Ana Reyes – target ₱5,000
+            ['member' => $members[2], 'rows' => [
+                ['type' => 'opening', 'direction' => 'credit', 'amount' => 2000.00, 'balance_after' => 2000.00, 'date' => '2025-10-01', 'or' => 'SC-OR-25003', 'remarks' => 'Opening balance upon membership'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 1500.00, 'balance_after' => 3500.00, 'date' => '2026-01-05', 'or' => 'SC-OR-26003', 'remarks' => 'First quarterly deposit'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 1500.00, 'balance_after' => 5000.00, 'date' => '2026-04-01', 'or' => 'SC-OR-26004', 'remarks' => 'Second quarterly deposit'],
+            ]],
+            // Pedro Villanueva – target ₱25,000
+            ['member' => $members[3], 'rows' => [
+                ['type' => 'opening', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 5000.00,  'date' => '2016-02-01', 'or' => 'SC-OR-16004', 'remarks' => 'Opening balance upon membership'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 10000.00, 'date' => '2018-01-10', 'or' => 'SC-OR-18004', 'remarks' => 'Annual deposit'],
+                ['type' => 'dividend','direction' => 'credit', 'amount' => 2500.00, 'balance_after' => 12500.00, 'date' => '2020-01-15', 'or' => 'SC-OR-20004', 'remarks' => 'Annual dividend 2019'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 17500.00, 'date' => '2022-01-10', 'or' => 'SC-OR-22004', 'remarks' => 'Annual deposit'],
+                ['type' => 'dividend','direction' => 'credit', 'amount' => 2500.00, 'balance_after' => 20000.00, 'date' => '2024-01-15', 'or' => 'SC-OR-24004', 'remarks' => 'Annual dividend 2023'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 25000.00, 'date' => '2025-07-01', 'or' => 'SC-OR-25004', 'remarks' => 'Mid-year deposit'],
+            ]],
+            // Carla Mendoza – target ₱35,000
+            ['member' => $members[4], 'rows' => [
+                ['type' => 'opening', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 5000.00,  'date' => '2014-09-01', 'or' => 'SC-OR-14005', 'remarks' => 'Opening balance upon membership'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 10000.00, 'date' => '2016-01-10', 'or' => 'SC-OR-16005', 'remarks' => 'Annual deposit'],
+                ['type' => 'dividend','direction' => 'credit', 'amount' => 2500.00, 'balance_after' => 12500.00, 'date' => '2018-01-15', 'or' => 'SC-OR-18005', 'remarks' => 'Annual dividend 2017'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 17500.00, 'date' => '2020-01-10', 'or' => 'SC-OR-20005', 'remarks' => 'Annual deposit'],
+                ['type' => 'dividend','direction' => 'credit', 'amount' => 2500.00, 'balance_after' => 20000.00, 'date' => '2021-01-10', 'or' => 'SC-OR-21005', 'remarks' => 'Annual dividend 2020'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 7500.00, 'balance_after' => 27500.00, 'date' => '2023-01-10', 'or' => 'SC-OR-23005', 'remarks' => 'Annual deposit'],
+                ['type' => 'deposit', 'direction' => 'credit', 'amount' => 5000.00, 'balance_after' => 32500.00, 'date' => '2025-01-10', 'or' => 'SC-OR-25005', 'remarks' => 'Annual deposit'],
+                ['type' => 'dividend','direction' => 'credit', 'amount' => 2500.00, 'balance_after' => 35000.00, 'date' => '2026-01-10', 'or' => 'SC-OR-26005', 'remarks' => 'Annual dividend 2025'],
+            ]],
+        ];
+
+        foreach ($scData as $memberSc) {
+            foreach ($memberSc['rows'] as $row) {
+                ShareCapitalTransaction::create([
+                    'member_id'        => $memberSc['member']->id,
+                    'type'             => $row['type'],
+                    'direction'        => $row['direction'],
+                    'amount'           => $row['amount'],
+                    'balance_after'    => $row['balance_after'],
+                    'or_number'        => $row['or'],
+                    'transaction_date' => $row['date'],
+                    'remarks'          => $row['remarks'],
+                    'posted_by'        => $officer->id,
+                ]);
+            }
+        }
+        $this->command->info('✓ Share capital transactions seeded');
+
+        // ── Beneficiaries ─────────────────────────────────────────
+        Beneficiary::whereIn('member_id', array_map(fn($m) => $m->id, $members))->forceDelete();
+
+        $beneficiaryData = [
+            // Maria Santos
+            ['member' => $members[0], 'rows' => [
+                ['type' => 'primary',   'first_name' => 'Manuel',   'last_name' => 'Santos',   'middle_name' => 'Cruz',    'relationship' => 'Spouse',  'birthdate' => '1978-05-12', 'share_percentage' => 60.00, 'contact_number' => '09171234510', 'sort_order' => 1],
+                ['type' => 'primary',   'first_name' => 'Gabriela', 'last_name' => 'Santos',   'middle_name' => null,      'relationship' => 'Daughter','birthdate' => '2008-03-20', 'share_percentage' => 40.00, 'contact_number' => null,          'sort_order' => 2,
+                 'guardian_name' => 'Manuel Santos', 'guardian_contact' => '09171234510', 'guardian_relationship' => 'Father'],
+            ]],
+            // Juan dela Cruz
+            ['member' => $members[1], 'rows' => [
+                ['type' => 'primary',   'first_name' => 'Lina',     'last_name' => 'dela Cruz','middle_name' => 'Perez',   'relationship' => 'Spouse',  'birthdate' => '1987-08-15', 'share_percentage' => 100.00,'contact_number' => '09281234520', 'sort_order' => 1],
+            ]],
+            // Ana Reyes
+            ['member' => $members[2], 'rows' => [
+                ['type' => 'primary',   'first_name' => 'Eduardo',  'last_name' => 'Reyes',    'middle_name' => 'Santos',  'relationship' => 'Father',  'birthdate' => '1960-04-20', 'share_percentage' => 50.00, 'contact_number' => '09351234530', 'sort_order' => 1],
+                ['type' => 'secondary', 'first_name' => 'Carmen',   'last_name' => 'Reyes',    'middle_name' => 'Garcia',  'relationship' => 'Mother',  'birthdate' => '1963-09-15', 'share_percentage' => 50.00, 'contact_number' => '09351234531', 'sort_order' => 1],
+            ]],
+            // Pedro Villanueva
+            ['member' => $members[3], 'rows' => [
+                ['type' => 'primary',   'first_name' => 'Elena',    'last_name' => 'Villanueva','middle_name'=> 'Soriano', 'relationship' => 'Spouse',  'birthdate' => '1980-11-08', 'share_percentage' => 60.00, 'contact_number' => '09191234540', 'sort_order' => 1],
+                ['type' => 'primary',   'first_name' => 'Marco',    'last_name' => 'Villanueva','middle_name'=> null,      'relationship' => 'Son',     'birthdate' => '2005-06-25', 'share_percentage' => 40.00, 'contact_number' => null,          'sort_order' => 2,
+                 'guardian_name' => 'Elena Villanueva', 'guardian_contact' => '09191234540', 'guardian_relationship' => 'Mother'],
+            ]],
+            // Carla Mendoza
+            ['member' => $members[4], 'rows' => [
+                ['type' => 'primary',   'first_name' => 'Ricardo',  'last_name' => 'Mendoza',  'middle_name' => 'Fuentes', 'relationship' => 'Spouse',  'birthdate' => '1975-03-10', 'share_percentage' => 60.00, 'contact_number' => '09061234550', 'sort_order' => 1],
+                ['type' => 'secondary', 'first_name' => 'Isabella', 'last_name' => 'Mendoza',  'middle_name' => null,      'relationship' => 'Daughter','birthdate' => '2003-11-28', 'share_percentage' => 40.00, 'contact_number' => null,          'sort_order' => 1],
+            ]],
+        ];
+
+        foreach ($beneficiaryData as $memberBen) {
+            foreach ($memberBen['rows'] as $row) {
+                Beneficiary::create([
+                    'member_id'             => $memberBen['member']->id,
+                    'type'                  => $row['type'],
+                    'first_name'            => $row['first_name'],
+                    'last_name'             => $row['last_name'],
+                    'middle_name'           => $row['middle_name'] ?? null,
+                    'relationship'          => $row['relationship'],
+                    'birthdate'             => $row['birthdate'],
+                    'share_percentage'      => $row['share_percentage'],
+                    'contact_number'        => $row['contact_number'] ?? null,
+                    'sort_order'            => $row['sort_order'],
+                    'guardian_name'         => $row['guardian_name'] ?? null,
+                    'guardian_contact'      => $row['guardian_contact'] ?? null,
+                    'guardian_relationship' => $row['guardian_relationship'] ?? null,
+                ]);
+            }
+        }
+        $this->command->info('✓ Beneficiaries seeded');
+
         $this->command->newLine();
-        $this->command->info('═══════════════════════════════════');
-        $this->command->info('  CREDENTIALS');
-        $this->command->info('  admin@crs.com   / crs2026  (admin)');
-        $this->command->info('  officer@crs.com / crs2026  (loan officer)');
+        $this->command->info('══════════════════════════════════════════════════════');
+        $this->command->info('  ADMIN / STAFF  (login at /login)');
+        $this->command->info('  admin@crs.com   / crs2026  (super-admin)');
+        $this->command->info('  officer@crs.com / crs2026  (loan-officer)');
         $this->command->info('  staff@crs.com   / crs2026  (staff)');
-        $this->command->info('═══════════════════════════════════');
+        $this->command->info('──────────────────────────────────────────────────────');
+        $this->command->info('  MEMBER PORTAL  (login at /portal)  pw: Demo@1234');
+        foreach ($members as $member) {
+            $username = strstr($member->email, '@', true);
+            $this->command->info(sprintf(
+                '  %-18s %-12s  %s %s',
+                $username,
+                $member->member_no,
+                $member->first_name,
+                $member->last_name
+            ));
+        }
+        $this->command->info('══════════════════════════════════════════════════════');
     }
 
     private function computeSchedule(float $principal, int $termMonths, string $frequency, float $annualRate): array

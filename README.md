@@ -7,6 +7,47 @@
 
 ### Module 1: Member
 ### Module 2: Loan (with Amortization Schedule)
+### Module 3: Member Portal (added May 2026)
+
+Member portal allows coop members to log in via a separate static HTML/JS dashboard to view their loans, payments, share capital, and beneficiaries.
+
+**Files added:**
+- `crs-member-portal/` — standalone static portal (login + dashboard HTML/JS/CSS)
+- `frontend/public/crs-member-portal/` — same files served by Vite for same-origin demo
+- `backend/database/migrations/2026_05_15_000001_create_member_portal_tables.php` — 3 new DB tables
+- `backend/app/Models/MemberPortalAccount.php` — portal account model
+- `backend/app/Models/MemberPortalSession.php` — token session model
+- `backend/app/Models/MemberPortalAuditLog.php` — audit log model
+- `backend/app/Http/Controllers/Api/MemberPortalAccountController.php` — admin CRUD (Settings)
+- `backend/app/Http/Controllers/Api/MemberPortalAuthController.php` — member login endpoint
+- `backend/app/Http/Controllers/Api/MemberPortalController.php` — member dashboard data endpoint
+- `frontend/src/services/setting.service.js` — extended with portal account methods
+- `frontend/src/stores/setting.store.js` — extended with portal account state
+- `frontend/src/pages/settings/SettingsPage.vue` — new "Member Portal Access" tab
+
+**Setup:**
+```bash
+php artisan migrate
+```
+
+**Member Portal Endpoints (no Sanctum — token-based):**
+```
+POST /api/v1/member-portal/auth/login     ← member login
+GET  /api/v1/member-portal/dashboard      ← member dashboard data (Bearer token)
+```
+
+**Admin Endpoints (Sanctum required):**
+```
+GET/POST                /api/v1/member-portal-accounts
+GET/PUT                 /api/v1/member-portal-accounts/{id}
+POST                    /api/v1/member-portal-accounts/{id}/toggle-active
+POST                    /api/v1/member-portal-accounts/{id}/reset-password
+```
+
+**Local demo URL:**
+```
+http://localhost:5174/crs-member-portal/index.html
+```
 
 ---
 
